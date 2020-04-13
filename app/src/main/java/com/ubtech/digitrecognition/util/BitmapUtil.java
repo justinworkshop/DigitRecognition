@@ -38,4 +38,14 @@ public class BitmapUtil {
         return retPixels;
     }
 
+    public Bitmap exportToBitmap(Bitmap rawBitmap, int width, int height) {
+        FileUtils.saveBitmapToSDCard(rawBitmap, "_raw_");
+        Bitmap scaledBitmap = Bitmap.createScaledBitmap(rawBitmap, width, height, false);
+        rawBitmap.recycle();
+
+        FileUtils.saveBitmapToSDCard(scaledBitmap, "_scale_");
+
+        return scaledBitmap;
+    }
+
 }

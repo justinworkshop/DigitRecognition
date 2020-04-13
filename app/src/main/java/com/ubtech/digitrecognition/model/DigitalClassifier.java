@@ -6,6 +6,8 @@ import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.util.Log;
 
+import com.ubtech.digitrecognition.util.Logger;
+
 import org.tensorflow.lite.Interpreter;
 
 import java.io.FileInputStream;
@@ -13,15 +15,17 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * Copyright (C), 2016-2020
  * FileName: DigitalClassifier
  * Author: wei.zheng
  * Date: 2020/4/10 21:34
- * Description: $
+ * Description: 数字分类器
  */
 public class DigitalClassifier {
     private static final String TAG = "DigitalClassifier";
@@ -29,6 +33,7 @@ public class DigitalClassifier {
     private static final int FLOAT_TYPE_SIZE = 4;
     private static final int PIXEL_SIZE = 1;
     private static final int OUTPUT_CLASSES_COUNT = 10;
+    private Logger logger;
 
     private Context context;
     private Interpreter interpreter;
@@ -36,22 +41,22 @@ public class DigitalClassifier {
     private int inputImageWidth;
     private int inputImageHeight;
     private int modelInputSize;
-    private boolean isInitialized = false;
+    private Future<Object> future;
 
     public DigitalClassifier(Context context) {
         this.context = context;
+        logger = new Logger(TAG);
+        logger.setMinLogLevel(Log.DEBUG);
+
         initialize();
     }
 
     private void initialize() {
-        executorService.execute(new Runnable() {
+        future = executorService.submit(new Callable<Object>() {
             @Override
-            public void run() {
-                try {
-                    initializeInterpreter();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+            public Object call() throws Exception {
+                initializeInterpreter();
+                return null;
             }
         });
     }
@@ -70,7 +75,6 @@ public class DigitalClassifier {
         modelInputSize = FLOAT_TYPE_SIZE * inputImageWidth * inputImageHeight * PIXEL_SIZE;
 
         this.interpreter = interpreter;
-        this.isInitialized = true;
     }
 
     private ByteBuffer loadModelFile(AssetManager assetManager) throws IOException {
@@ -82,32 +86,36 @@ public class DigitalClassifier {
         return channel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
     }
 
-    public String classify(Bitmap bitmap) {
-        if (!isInitialized) {
+    public void classify(Bitmap bitmap, ClassifyCallback callback) {
+        if (!future.isDone()) {
             throw new IllegalStateException("TF Lite Interpreter is not initialized yet.");
         }
 
-        long startTime;
-        long elapsedTime;
+        future = executorService.submit(new Callable<Object>() {
+            @Override
+            public Object call() throws Exception {
+                long startTime;
+                long elapsedTime;
 
-        startTime = System.nanoTime();
-        Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, inputImageWidth, inputImageHeight, true);
-        ByteBuffer byteBuffer = convertBitmapToByteBuffer(resizedBitmap);
-        elapsedTime = (System.nanoTime() - startTime) / 1000000;
-        Log.d(TAG, "Preprocessing time = " + elapsedTime + "ms");
+                startTime = System.nanoTime();
+                Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, inputImageWidth, inputImageHeight, true);
+                ByteBuffer byteBuffer = convertBitmapToByteBuffer(resizedBitmap);
+                elapsedTime = (System.nanoTime() - startTime) / 1000000;
+                logger.d("Preprocessing time cost: " + elapsedTime + "ms");
 
-        startTime = System.nanoTime();
-        float[][] result = new float[1][OUTPUT_CLASSES_COUNT];
-        System.out.println("intput byteBuffer " + byteBuffer.toString());
-        interpreter.run(byteBuffer, result);
-        elapsedTime = (System.nanoTime() - startTime) / 1000000;
-        Log.d(TAG, "Inference time = " + elapsedTime + "ms");
+                startTime = System.nanoTime();
+                float[][] result = new float[1][OUTPUT_CLASSES_COUNT];
+                interpreter.run(byteBuffer, result);
+                elapsedTime = (System.nanoTime() - startTime) / 1000000;
+                logger.d("Inference time cost: " + elapsedTime + "ms");
 
-        for (int i = 0; i < result[0].length; i++) {
-            System.out.println("output: " + i + " - " + result[0][i]);
-        }
+                if (callback != null) {
+                    callback.onComplete(getOutputString(result[0]));
+                }
 
-        return getOutputString(result[0]);
+                return null;
+            }
+        });
 
     }
 
@@ -133,15 +141,26 @@ public class DigitalClassifier {
     }
 
     private String getOutputString(float[] output) {
-        float max = output[0];
+        StringBuilder stringBuilder = new StringBuilder();
+        float maxValue = output[0];
         int maxIndex = 0;
         for (int i = 0; i < output.length; i++) {
-            if (max < output[i]) {
-                max = output[i];
+            stringBuilder.append(i).append(" -> ").append(output[i]).append("\r\n");
+            if (maxValue < output[i]) {
+                maxValue = output[i];
                 maxIndex = i;
             }
         }
 
-        return String.format("Prediction Result: %d\nConfidence: %2f", maxIndex, output[maxIndex]);
+        return String.format("Prediction Result: %d\nConfidence: %2f\nRank: \n%s", maxIndex, output[maxIndex], stringBuilder.toString());
+    }
+
+    public void destroy() {
+        interpreter.close();
+        executorService.shutdown();
+    }
+
+    public interface ClassifyCallback {
+        void onComplete(String result);
     }
 }

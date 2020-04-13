@@ -6,7 +6,6 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
-import android.view.MotionEvent;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -33,18 +32,14 @@ public class MainActivity extends AppCompatActivity {
         classifierViewModel = new MainActivityViewModel(this, activityMainBinding);
         activityMainBinding.setViewModel(classifierViewModel);
 
-        activityMainBinding.fingerPaintView.setVisibility(View.INVISIBLE);
         activityMainBinding.drawView.setStrokeWidth(70.0f);
         activityMainBinding.drawView.setColor(Color.WHITE);
         activityMainBinding.drawView.setBackgroundColor(Color.BLACK);
-        activityMainBinding.drawView.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                activityMainBinding.drawView.onTouchEvent(event);
-                System.out.println("output "+event.toString());
-                return true;
-            }
-        });
+
+        activityMainBinding.painterView.setStrokeWidth(70.0f);
+        activityMainBinding.painterView.setColor(Color.WHITE);
+        activityMainBinding.painterView.setBackgroundColor(Color.BLACK);
+
 
         if (hasPermission()) {
             makeButtonVisible(true);
@@ -103,9 +98,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
+    protected void onDestroy() {
+        super.onDestroy();
+        classifierViewModel.destroy();
+        activityMainBinding.unbind();
     }
-
-
 }

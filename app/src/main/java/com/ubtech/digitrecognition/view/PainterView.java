@@ -1,47 +1,42 @@
 package com.ubtech.digitrecognition.view;
 
-import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
-
-import com.ubtech.digitrecognition.util.FileUtils;
 
 /**
  * Copyright (C), 2016-2020
  * FileName: FingerPaintView
  * Author: wei.zheng
  * Date: 2020/4/9 17:28
- * Description: $
+ * Description: PainterView
  */
-public class FingerPaintView extends View {
+public class PainterView extends View {
     private Path path;
     private Bitmap drawingBitmap;
     private Canvas drawingCanvas;
     private Paint drawingPaint;
-    private float penX = 0.0f;
-    private float penY = 0.0f;
+    private float curX = 0.0f;
+    private float curY = 0.0f;
     private Paint paint;
-    private boolean isEmpty = true;
 
-    public FingerPaintView(Context context) {
+    public PainterView(Context context) {
         super(context);
         init();
     }
 
-    public FingerPaintView(Context context, AttributeSet attrs) {
+    public PainterView(Context context, AttributeSet attrs) {
         super(context, attrs);
         init();
     }
 
-    public FingerPaintView(Context context, AttributeSet attrs, int defStyleAttr) {
+    public PainterView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         init();
     }
@@ -52,11 +47,19 @@ public class FingerPaintView extends View {
         paint = new Paint();
         paint.setAntiAlias(true);
         paint.setDither(true);
-        paint.setColor(Color.BLACK);
+        paint.setColor(Color.WHITE);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeCap(Paint.Cap.ROUND);
         paint.setStrokeJoin(Paint.Join.ROUND);
-        paint.setStrokeWidth(70f);
+        paint.setStrokeWidth(70.0f);
+    }
+
+    public void setStrokeWidth(float strokeWidth) {
+        paint.setStrokeWidth(strokeWidth);
+    }
+
+    public void setColor(int color) {
+        paint.setColor(color);
     }
 
     @Override
@@ -75,35 +78,28 @@ public class FingerPaintView extends View {
         }
     }
 
-    @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (event == null)
             return false;
-        isEmpty = false;
         float x = event.getX();
         float y = event.getY();
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
                 path.reset();
                 path.moveTo(x, y);
-                penX = x;
-                penY = y;
+                curX = x;
+                curY = y;
                 invalidate();
                 break;
             case MotionEvent.ACTION_MOVE:
-                float dx = Math.abs(x - penX);
-                float dy = Math.abs(y - penY);
-                float touchTolerance = 4f;
-                if (dx >= touchTolerance || dy >= touchTolerance) {
-                    path.quadTo(penX, penY, (x + penX) / 2, (y + penY) / 2);
-                    penX = x;
-                    penY = y;
-                }
+                path.quadTo(curX, curY, (x + curX) / 2, (y + curY) / 2);
+                curX = x;
+                curY = y;
                 invalidate();
                 break;
             case MotionEvent.ACTION_UP:
-                path.lineTo(penX, penY);
+                path.lineTo(curX, curY);
                 drawingCanvas.drawPath(path, paint);
                 path.reset();
                 performClick();
@@ -118,35 +114,15 @@ public class FingerPaintView extends View {
         path.reset();
         drawingBitmap = Bitmap.createBitmap(drawingBitmap.getWidth(), drawingBitmap.getHeight(), Bitmap.Config.ARGB_8888);
         drawingCanvas = new Canvas(drawingBitmap);
-        isEmpty = true;
         invalidate();
     }
 
-    public boolean isEmpty() {
-        return isEmpty;
-    }
-
-    public Bitmap getRawBitmap() {
-        Bitmap rawBitmap = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(rawBitmap);
-        Drawable bgDrawable = getBackground();
-        if (bgDrawable != null) {
-            bgDrawable.draw(canvas);
-        } else {
-            canvas.drawColor(Color.WHITE);
-        }
+    public Bitmap getBitmap() {
+        Bitmap bitmap = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.WHITE);
         draw(canvas);
 
-        return rawBitmap;
-    }
-
-    public Bitmap exportToBitmap(Bitmap rawBitmap, int width, int height) {
-        FileUtils.saveBitmapToSDCard(rawBitmap, "_raw_");
-        Bitmap scaledBitmap = Bitmap.createScaledBitmap(rawBitmap, width, height, false);
-        rawBitmap.recycle();
-
-        FileUtils.saveBitmapToSDCard(scaledBitmap, "_scale_");
-
-        return scaledBitmap;
+        return bitmap;
     }
 }

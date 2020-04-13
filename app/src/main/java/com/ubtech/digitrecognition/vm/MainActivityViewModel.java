@@ -2,20 +2,14 @@ package com.ubtech.digitrecognition.vm;
 
 import android.app.Activity;
 import android.graphics.Bitmap;
-import android.graphics.Color;
-import android.view.MotionEvent;
 import android.view.View;
-import android.widget.Toast;
 
 import androidx.databinding.BaseObservable;
 
 import com.ubtech.digitrecognition.databinding.ActivityMainBinding;
 import com.ubtech.digitrecognition.model.DigitalClassifier;
-import com.ubtech.digitrecognition.model.KerasTFLite;
-import com.ubtech.digitrecognition.util.BitmapUtil;
+import com.ubtech.digitrecognition.util.FileUtils;
 import com.ubtech.digitrecognition.util.Logger;
-
-import java.util.Arrays;
 
 /**
  * Copyright (C), 2016-2020
@@ -29,9 +23,10 @@ public class MainActivityViewModel extends BaseObservable {
 
     private Activity activity;
     private ActivityMainBinding viewDataBinding;
+    private String viewName;
     private String classifyResult;
-    private KerasTFLite kerasTFLite;
     private DigitalClassifier digitalClassifier;
+    private boolean switchFlag = false;
     private Logger mLogger = new Logger();
 
     public MainActivityViewModel(Activity activity, ActivityMainBinding viewDataBinding) {
@@ -41,8 +36,17 @@ public class MainActivityViewModel extends BaseObservable {
     }
 
     private void init() {
-        kerasTFLite = new KerasTFLite(activity);
         digitalClassifier = new DigitalClassifier(activity);
+        switchView(null);
+    }
+
+    public String getViewName() {
+        return viewName;
+    }
+
+    public void setViewName(String viewName) {
+        this.viewName = viewName;
+        notifyPropertyChanged(com.ubtech.digitrecognition.BR._all);
     }
 
     public String getClassifyResult() {
@@ -54,45 +58,49 @@ public class MainActivityViewModel extends BaseObservable {
         notifyPropertyChanged(com.ubtech.digitrecognition.BR._all);
     }
 
+    public void switchView(View v) {
+        switchFlag = !switchFlag;
+        if (switchFlag) {
+            viewDataBinding.painterView.setVisibility(View.VISIBLE);
+            viewDataBinding.drawView.setVisibility(View.INVISIBLE);
+        } else {
+            viewDataBinding.painterView.setVisibility(View.INVISIBLE);
+            viewDataBinding.drawView.setVisibility(View.VISIBLE);
+        }
+        setViewName(switchFlag ? "PainterView" : "DrawView");
+    }
+
     public void clearView(View v) {
-        viewDataBinding.fingerPaintView.clear();
-        viewDataBinding.drawView.clearCanvas();
         viewDataBinding.textResult.setText("");
+        if (viewDataBinding.painterView.getVisibility() == View.VISIBLE) {
+            viewDataBinding.painterView.clear();
+        } else {
+            viewDataBinding.drawView.clearCanvas();
+        }
     }
 
     public void detectView(View v) {
-        if (viewDataBinding.fingerPaintView.isEmpty()) {
-            Toast.makeText(activity, "Bitmap view is Empty", Toast.LENGTH_SHORT).show();
-//            return;
+        Bitmap rawBitmap;
+        String source;
+        if (viewDataBinding.painterView.getVisibility() == View.VISIBLE) {
+            rawBitmap = viewDataBinding.painterView.getBitmap();
+            source = "PainterView";
+        } else {
+            rawBitmap = viewDataBinding.drawView.getBitmap();
+            source = "DrawView";
         }
+        FileUtils.saveBitmapToSDCard(rawBitmap, source);
 
-//        Bitmap rawBitmap = viewDataBinding.fingerPaintView.getRawBitmap();
-        Bitmap rawBitmap = viewDataBinding.drawView.getBitmap();
+        System.out.println("source:" + source + " w:" + rawBitmap.getWidth() + ", h:" + rawBitmap.getHeight());
+        digitalClassifier.classify(rawBitmap, new DigitalClassifier.ClassifyCallback() {
+            @Override
+            public void onComplete(String result) {
+                setClassifyResult(result);
+            }
+        });
+    }
 
-        try {
-            System.out.println("w:" + rawBitmap.getWidth() + ", h:" + rawBitmap.getHeight());
-            String res = digitalClassifier.classify(rawBitmap);
-            Toast.makeText(activity, res, Toast.LENGTH_SHORT).show();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        final int PIXEL_SIZE = 28;
-        Bitmap bitmap = viewDataBinding.fingerPaintView.exportToBitmap(rawBitmap, PIXEL_SIZE, PIXEL_SIZE);
-        float pixels[] = BitmapUtil.getPixelData(bitmap);
-        //should be same format with train
-        for (int i = 0; i < pixels.length; i++) {
-            pixels[i] = pixels[i] / 255;
-        }
-//        for (int i = 0; i < PIXEL_SIZE; i++) {
-//            float[] a = Arrays.copyOfRange(pixels, i * PIXEL_SIZE, i * PIXEL_SIZE + PIXEL_SIZE);
-//            mLogger.d("pixel - " + i + "  " + Arrays.toString(a));
-//        }
-        mLogger.d("Pixel Data: " + Arrays.toString(pixels));
-        mLogger.d("Start run");
-        String result = kerasTFLite.run(pixels);
-        classifyResult = "数字是: " + result;
-
-        setClassifyResult(classifyResult);
+    public void destroy() {
+        digitalClassifier.destroy();
     }
 }
