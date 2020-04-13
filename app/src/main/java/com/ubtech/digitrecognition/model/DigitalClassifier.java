@@ -1,4 +1,4 @@
-package com.ubtech.digitrecognition;
+package com.ubtech.digitrecognition.model;
 
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;
@@ -25,6 +25,7 @@ import java.util.concurrent.Executors;
  */
 public class DigitalClassifier {
     private static final String TAG = "DigitalClassifier";
+    private static final String MODEL_FILE = "keras_mnist_model.tflite";
     private static final int FLOAT_TYPE_SIZE = 4;
     private static final int PIXEL_SIZE = 1;
     private static final int OUTPUT_CLASSES_COUNT = 10;
@@ -35,12 +36,14 @@ public class DigitalClassifier {
     private int inputImageWidth;
     private int inputImageHeight;
     private int modelInputSize;
+    private boolean isInitialized = false;
 
     public DigitalClassifier(Context context) {
         this.context = context;
+        initialize();
     }
 
-    public void initialize() {
+    private void initialize() {
         executorService.execute(new Runnable() {
             @Override
             public void run() {
@@ -54,7 +57,7 @@ public class DigitalClassifier {
     }
 
     private void initializeInterpreter() throws IOException {
-        AssetManager assetManager = context.getAssets();
+        AssetManager assetManager = context.getResources().getAssets();
         ByteBuffer model = loadModelFile(assetManager);
 
         Interpreter.Options options = new Interpreter.Options();
@@ -67,10 +70,11 @@ public class DigitalClassifier {
         modelInputSize = FLOAT_TYPE_SIZE * inputImageWidth * inputImageHeight * PIXEL_SIZE;
 
         this.interpreter = interpreter;
+        this.isInitialized = true;
     }
 
     private ByteBuffer loadModelFile(AssetManager assetManager) throws IOException {
-        AssetFileDescriptor assetFileDescriptor = assetManager.openFd("keras_mnist_model.tflite");
+        AssetFileDescriptor assetFileDescriptor = assetManager.openFd(MODEL_FILE);
         FileInputStream fis = new FileInputStream(assetFileDescriptor.getFileDescriptor());
         FileChannel channel = fis.getChannel();
         long startOffset = assetFileDescriptor.getStartOffset();
@@ -79,6 +83,10 @@ public class DigitalClassifier {
     }
 
     public String classify(Bitmap bitmap) {
+        if (!isInitialized) {
+            throw new IllegalStateException("TF Lite Interpreter is not initialized yet.");
+        }
+
         long startTime;
         long elapsedTime;
 
@@ -90,9 +98,14 @@ public class DigitalClassifier {
 
         startTime = System.nanoTime();
         float[][] result = new float[1][OUTPUT_CLASSES_COUNT];
+        System.out.println("intput byteBuffer " + byteBuffer.toString());
         interpreter.run(byteBuffer, result);
         elapsedTime = (System.nanoTime() - startTime) / 1000000;
         Log.d(TAG, "Inference time = " + elapsedTime + "ms");
+
+        for (int i = 0; i < result[0].length; i++) {
+            System.out.println("output: " + i + " - " + result[0][i]);
+        }
 
         return getOutputString(result[0]);
 
@@ -124,6 +137,7 @@ public class DigitalClassifier {
         int maxIndex = 0;
         for (int i = 0; i < output.length; i++) {
             if (max < output[i]) {
+                max = output[i];
                 maxIndex = i;
             }
         }

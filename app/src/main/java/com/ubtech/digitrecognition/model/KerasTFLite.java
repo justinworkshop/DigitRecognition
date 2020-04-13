@@ -1,4 +1,4 @@
-package com.ubtech.digitrecognition;
+package com.ubtech.digitrecognition.model;
 
 import android.content.Context;
 import android.content.res.AssetManager;
@@ -83,8 +83,8 @@ public class KerasTFLite {
         mLogger.d("xxx-> getMax");
         int maxID = 0;
         float maxValue = results[maxID];
-        for (int i = 1; i < results.length; i++) {
-            mLogger.d("xxx->" + results[i]);
+        for (int i = 0; i < results.length; i++) {
+            mLogger.d("xxx-> " + i + " " + results[i]);
             if (results[i] > maxValue) {
                 maxID = i;
                 maxValue = results[maxID];
